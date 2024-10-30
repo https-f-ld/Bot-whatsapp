@@ -1,0 +1,46 @@
+mkdir whatsapp-bot
+cd whatsapp-bot
+npm init -y
+npm install @adiwajshing/baileys
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason } = require('@adiwajshing/baileys');
+const { Boom } = require('@hapi/boom');
+const { state, saveState } = useSingleFileAuthState('./auth_info.json');
+
+async function startBot() {
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: true,
+    });
+
+    // Evento de conexão e QR Code
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if(connection === 'close') {
+            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Conexão fechada, tentando reconectar...', shouldReconnect);
+            if(shouldReconnect) startBot();
+        } else if(connection === 'open') {
+            console.log('Bot conectado com sucesso!');
+        }
+    });
+
+    sock.ev.on('creds.update', saveState);
+
+    // Evento para novas mensagens
+    sock.ev.on('messages.upsert', async (msgUpdate) => {
+        const msg = msgUpdate.messages[0];
+        
+        if (!msg.key.fromMe && msg.message) {
+            const senderId = msg.key.remoteJid;
+            const messageContent = msg.message.conversation || msg.message.extendedTextMessage?.text;
+            
+            console.log(`Mensagem recebida de ${senderId}: ${messageContent}`);
+
+            // Resposta automática
+            await sock.sendMessage(senderId, { text: 'Olá! Esta é uma resposta automática do bot.' });
+        }
+    });
+}
+
+startBot().catch((err) => console.error("Erro inesperado: " + err));
+node bot.js
